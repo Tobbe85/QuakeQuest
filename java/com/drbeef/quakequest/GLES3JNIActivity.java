@@ -93,9 +93,11 @@ import android.support.v4.content.ContextCompat;
 		checkPermissionsAndInitialize();
 	}
 
+	private boolean waitingForPermission = false;
 	/** Initializes the Activity only if the permission has been granted. */
 	private void checkPermissionsAndInitialize() {
 		if (!Environment.isExternalStorageManager()) {
+			waitingForPermission = true;
 			//request for the permission
 			Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
 			Uri uri = Uri.fromParts("package", getPackageName(), null);
@@ -111,7 +113,15 @@ import android.support.v4.content.ContextCompat;
 
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		create();
+		super.onActivityResult(requestCode, resultCode, data);
+		if (requestCode == 1) {
+			waitingForPermission = false;
+			if (Environment.isExternalStorageManager()) {
+				create();
+			} else {
+				Log.e(TAG, "Permission not granted");
+			}
+		}
 	}
 
 	public void create() {
@@ -199,33 +209,31 @@ import android.support.v4.content.ContextCompat;
 		System.exit(0);
 	}
 
-	@Override protected void onStart()
-	{
-		Log.v( TAG, "GLES3JNIActivity::onStart()" );
+	@Override protected void onStart() {
 		super.onStart();
-
-		GLES3JNILib.onStart( mNativeHandle, this );
+		if (!waitingForPermission && mNativeHandle != 0) {
+			GLES3JNILib.onStart(mNativeHandle, this);
+		}
 	}
 
-	@Override protected void onResume()
-	{
-		Log.v( TAG, "GLES3JNIActivity::onResume()" );
+	@Override protected void onResume() {
 		super.onResume();
-
-		GLES3JNILib.onResume( mNativeHandle );
+		if (!waitingForPermission && mNativeHandle != 0) {
+			GLES3JNILib.onResume(mNativeHandle);
+		}
 	}
 
-	@Override protected void onPause()
-	{
-		Log.v( TAG, "GLES3JNIActivity::onPause()" );
-		GLES3JNILib.onPause( mNativeHandle );
+	@Override protected void onPause() {
+		if (!waitingForPermission && mNativeHandle != 0) {
+			GLES3JNILib.onPause(mNativeHandle);
+		}
 		super.onPause();
 	}
 
-	@Override protected void onStop()
-	{
-		Log.v( TAG, "GLES3JNIActivity::onStop()" );
-		GLES3JNILib.onStop( mNativeHandle );
+	@Override protected void onStop() {
+		if (!waitingForPermission && mNativeHandle != 0) {
+			GLES3JNILib.onStop(mNativeHandle);
+		}
 		super.onStop();
 	}
 
