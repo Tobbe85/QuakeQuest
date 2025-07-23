@@ -14,13 +14,15 @@
 	<uses-permission android:name="android.permission.INTERNET" />
 	<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-	<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+	<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+	<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 	<uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />
 	
 	<application
 		android:allowBackup="false"
 		android:icon="@drawable/ic_qquest"
 		android:label="@string/quakequest"
+		android:requestLegacyExternalStorage="true"
 		android:extractNativeLibs="true">
 
 		<!-- META QUEST -->

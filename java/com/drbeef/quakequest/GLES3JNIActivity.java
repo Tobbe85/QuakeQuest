@@ -63,8 +63,12 @@ import android.support.v4.content.ContextCompat;
 
 	String commandLineParams;
 
-    private SurfaceHolder mSurfaceHolder;
+	private SurfaceHolder mSurfaceHolder;
 	private long mNativeHandle;
+
+	private int permissionAttempt = 0;
+	private static final int READ_EXTERNAL_STORAGE_PERMISSION_ID = 1;
+	private static final int WRITE_EXTERNAL_STORAGE_PERMISSION_ID = 2;
 
 	String dir;
 
@@ -74,7 +78,7 @@ import android.support.v4.content.ContextCompat;
 		Log.v( TAG, "GLES3JNIActivity::onCreate()" );
 		super.onCreate( icicle );
 
-        SurfaceView mView = new SurfaceView(this);
+		SurfaceView mView = new SurfaceView(this);
 		setContentView(mView);
 		mView.getHolder().addCallback( this );
 
@@ -93,16 +97,15 @@ import android.support.v4.content.ContextCompat;
 		checkPermissionsAndInitialize();
 	}
 
-	private boolean waitingForPermission = false;
 	/** Initializes the Activity only if the permission has been granted. */
 	private void checkPermissionsAndInitialize() {
-		if (!Environment.isExternalStorageManager()) {
-			waitingForPermission = true;
-			//request for the permission
-			Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-			Uri uri = Uri.fromParts("package", getPackageName(), null);
-			intent.setData(uri);
-			startActivityForResult(intent, 1);
+		// Boilerplate for checking runtime permissions in Android.
+		if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+				!= PackageManager.PERMISSION_GRANTED){
+			ActivityCompat.requestPermissions(this,
+					new String[]{Manifest.permission.READ_EXTERNAL_STORAGE,
+							Manifest.permission.WRITE_EXTERNAL_STORAGE},
+					WRITE_EXTERNAL_STORAGE_PERMISSION_ID);
 		}
 		else
 		{
@@ -111,17 +114,22 @@ import android.support.v4.content.ContextCompat;
 		}
 	}
 
+	/** Handles the user accepting the permission. */
 	@Override
-	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		super.onActivityResult(requestCode, resultCode, data);
-		if (requestCode == 1) {
-			waitingForPermission = false;
-			if (Environment.isExternalStorageManager()) {
-				create();
+	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+		if (requestCode == WRITE_EXTERNAL_STORAGE_PERMISSION_ID) {
+			permissionAttempt++;
+			if (permissionAttempt < 5) {
+				checkPermissionsAndInitialize();
 			} else {
-				Log.e(TAG, "Permission not granted");
+				System.exit(0);
 			}
 		}
+	}
+
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		create();
 	}
 
 	public void create() {
@@ -164,11 +172,11 @@ import android.support.v4.content.ContextCompat;
 
 		mNativeHandle = GLES3JNILib.onCreate( this, commandLineParams );
 	}
-	
+
 	public void copy_asset(String path, String name) {
 		File f = new File(path + "/" + name);
 		if (!f.exists()) {
-			
+
 			//Ensure we have an appropriate folder
 			new File(path).mkdirs();
 			_copy_asset(name, path + "/" + name);
@@ -209,29 +217,43 @@ import android.support.v4.content.ContextCompat;
 		System.exit(0);
 	}
 
-	@Override protected void onStart() {
+	@Override protected void onStart()
+	{
+		Log.v( TAG, "GLES3JNIActivity::onStart()" );
 		super.onStart();
-		if (!waitingForPermission && mNativeHandle != 0) {
+
+		if ( mNativeHandle != 0 )
+		{
 			GLES3JNILib.onStart(mNativeHandle, this);
 		}
 	}
 
-	@Override protected void onResume() {
+	@Override protected void onResume()
+	{
+		Log.v( TAG, "GLES3JNIActivity::onResume()" );
 		super.onResume();
-		if (!waitingForPermission && mNativeHandle != 0) {
+
+		if ( mNativeHandle != 0 )
+		{
 			GLES3JNILib.onResume(mNativeHandle);
 		}
 	}
 
-	@Override protected void onPause() {
-		if (!waitingForPermission && mNativeHandle != 0) {
+	@Override protected void onPause()
+	{
+		Log.v( TAG, "GLES3JNIActivity::onPause()" );
+		if ( mNativeHandle != 0 )
+		{
 			GLES3JNILib.onPause(mNativeHandle);
 		}
 		super.onPause();
 	}
 
-	@Override protected void onStop() {
-		if (!waitingForPermission && mNativeHandle != 0) {
+	@Override protected void onStop()
+	{
+		Log.v( TAG, "GLES3JNIActivity::onStop()" );
+		if ( mNativeHandle != 0 )
+		{
 			GLES3JNILib.onStop(mNativeHandle);
 		}
 		super.onStop();
@@ -271,7 +293,7 @@ import android.support.v4.content.ContextCompat;
 			mSurfaceHolder = holder;
 		}
 	}
-	
+
 	@Override public void surfaceDestroyed( SurfaceHolder holder )
 	{
 		Log.v( TAG, "GLES3JNIActivity::surfaceDestroyed()" );
