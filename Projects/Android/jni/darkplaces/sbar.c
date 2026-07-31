@@ -138,11 +138,15 @@ qboolean VR_UseScreenLayer();
 
 int Sbar_GetXOffset()
 {
+	float offsetX, offsetY;
+
 	if (VR_UseScreenLayer())
 		return 0;
 
+	GetHUDOffset(&offsetX, &offsetY);
+
 	//This will give the status bar depth in the 3D space
-	return (r_stereo_side ? -20 : 20);
+	return (int)((r_stereo_side ? -20 : 20) + offsetX);
 }
 
 /*
@@ -1748,8 +1752,10 @@ void Sbar_Draw (void)
 		pic = Draw_CachePic (va(vabuf, sizeof(vabuf), "gfx/crosshair%i", crosshair.integer));
 		int stereoOffset = vr_worldscale.value > 200.0f ? 12 : 5;
 		int yOffset = (vr_worldscale.value > 200.0f ? 20 : 5);
-		DrawQ_Pic((vid_conwidth.integer - pic->width * crosshair_size.value) * 0.5f + (r_stereo_side ? -stereoOffset : stereoOffset),
-				  (vid_conheight.integer - pic->height * crosshair_size.value) * 0.5f + yOffset,
+		float hudOffsetX, hudOffsetY;
+		GetHUDOffset(&hudOffsetX, &hudOffsetY);
+		DrawQ_Pic((vid_conwidth.integer - pic->width * crosshair_size.value) * 0.5f + (r_stereo_side ? -stereoOffset : stereoOffset) + hudOffsetX,
+				  (vid_conheight.integer - pic->height * crosshair_size.value) * 0.5f + yOffset + hudOffsetY,
 				  pic, pic->width * crosshair_size.value, pic->height * crosshair_size.value,
 				  crosshair_color_red.value, crosshair_color_green.value, crosshair_color_blue.value, crosshair_color_alpha.value, 0);
 	}

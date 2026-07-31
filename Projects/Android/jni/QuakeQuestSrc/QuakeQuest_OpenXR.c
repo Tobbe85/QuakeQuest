@@ -329,32 +329,93 @@ void VR_FrameSetup()
 
 }
 
+//True when the runtime eye views are available and the game is drawing in stereo
+static bool VR_EyeViewsValid()
+{
+	return (gAppState.SessionActive && gAppState.Projections != NULL && !VR_UseScreenLayer());
+}
+
 bool VR_GetVRProjection(int eye, float zNear, float zFar, float* projection)
 {
-    if (strstr(gAppState.OpenXRHMD, "pico") != NULL)
-    {
-        XrMatrix4x4f_CreateProjectionFov(
-                &(gAppState.ProjectionMatrices[eye]), GRAPHICS_OPENGL_ES,
-                gAppState.Projections[eye].fov, zNear, zFar);
-    }
+	//The big screen is a flat quad, so let the engine build its own symmetric matrix
+	if (!VR_EyeViewsValid())
+	{
+		return false;
+	}
 
-    if (strstr(gAppState.OpenXRHMD, "meta") != NULL)
-    {
-        XrFovf fov = {};
-        for (int eye = 0; eye < ovrMaxNumEyes; eye++)
-        {
-            fov.angleLeft += gAppState.Projections[eye].fov.angleLeft / 2.0f;
-            fov.angleRight += gAppState.Projections[eye].fov.angleRight / 2.0f;
-            fov.angleUp += gAppState.Projections[eye].fov.angleUp / 2.0f;
-            fov.angleDown += gAppState.Projections[eye].fov.angleDown / 2.0f;
-        }
-        XrMatrix4x4f_CreateProjectionFov(
-                &(gAppState.ProjectionMatrices[eye]), GRAPHICS_OPENGL_ES,
-                fov, zNear, zFar);
-    }
+	XrMatrix4x4f_CreateProjectionFov(
+			&(gAppState.ProjectionMatrices[eye]), GRAPHICS_OPENGL_ES,
+			gAppState.Projections[eye].fov, zNear, zFar);
 
 	memcpy(projection, gAppState.ProjectionMatrices[eye].m, 16 * sizeof(float));
 	return true;
+}
+
+//Widest tangent of either eye on each axis. The engine culls with a single symmetric
+//frustum, so it has to cover the union of both asymmetric eye frusta or geometry pops.
+bool VR_GetMaxFovTangents(float *tanX, float *tanY)
+{
+	if (!VR_EyeViewsValid())
+	{
+		return false;
+	}
+
+	*tanX = 0.0f;
+	*tanY = 0.0f;
+	for (int eye = 0; eye < ovrMaxNumEyes; eye++)
+	{
+		const XrFovf fov = gAppState.Projections[eye].fov;
+		*tanX = fmaxf(*tanX, fmaxf(fabsf(tanf(fov.angleLeft)), fabsf(tanf(fov.angleRight))));
+		*tanY = fmaxf(*tanY, fmaxf(fabsf(tanf(fov.angleUp)), fabsf(tanf(fov.angleDown))));
+	}
+
+	return (*tanX > 0.0f && *tanY > 0.0f);
+}
+
+//Fraction of the screen a 2D element must move to sit on the eye's forward axis.
+//An asymmetric frustum puts that axis away from the centre of the eye buffer, so a
+//HUD element drawn at the centre of both eye buffers would otherwise diverge.
+bool VR_GetOffCenterFov(int eye, float *offsetX, float *offsetY)
+{
+	if (!VR_EyeViewsValid())
+	{
+		return false;
+	}
+
+	const XrFovf fov = gAppState.Projections[eye].fov;
+	const float l = tanf(fov.angleLeft);
+	const float r = tanf(fov.angleRight);
+	const float u = tanf(fov.angleUp);
+	const float d = tanf(fov.angleDown);
+
+	if ((r - l) < 0.0001f || (u - d) < 0.0001f)
+	{
+		return false;
+	}
+
+	*offsetX = -(r + l) / (r - l) * 0.5f;
+	//Console coordinates grow downwards, normalised device coordinates grow upwards
+	*offsetY = (u + d) / (u - d) * 0.5f;
+	return true;
+}
+
+//Interpupillary distance in metres, measured from the runtime eye poses
+float VR_GetIPD()
+{
+	if (!gAppState.SessionActive || gAppState.Projections == NULL)
+	{
+		return 0.065f;
+	}
+
+	const XrVector3f *l = &gAppState.Projections[0].pose.position;
+	const XrVector3f *r = &gAppState.Projections[1].pose.position;
+	const float dx = r->x - l->x;
+	const float dy = r->y - l->y;
+	const float dz = r->z - l->z;
+	const float ipd = sqrtf(dx * dx + dy * dy + dz * dz);
+
+	//A runtime that has not reported a pose yet gives 0, which would flatten the stereo
+	return (ipd > 0.02f && ipd < 0.1f) ? ipd : 0.065f;
 }
 
 

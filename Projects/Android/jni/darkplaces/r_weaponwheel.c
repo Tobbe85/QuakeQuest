@@ -400,6 +400,7 @@ void R_WeaponWheel_DrawText(void)
 {
 	const char *text;
 	float width, x, y;
+	float hudoffsetx, hudoffsety;
 	int stereooffset;
 
 	if (!weaponwheel_active || weaponwheel_selection < 0 || weaponwheel_selection >= wheelslotcount)
@@ -408,8 +409,9 @@ void R_WeaponWheel_DrawText(void)
 	text = wheelslots[weaponwheel_selection].weapon->name;
 	width = DrawQ_TextWidth(text, 0, 16, 16, true, FONT_CENTERPRINT);
 	stereooffset = vr_worldscale.value > 200.0f ? 12 : 5;
-	x = (vid_conwidth.integer - width) * 0.5f + (r_stereo_side ? -stereooffset : stereooffset);
-	y = vid_conheight.integer * 0.68f;
+	GetHUDOffset(&hudoffsetx, &hudoffsety);
+	x = (vid_conwidth.integer - width) * 0.5f + (r_stereo_side ? -stereooffset : stereooffset) + hudoffsetx;
+	y = vid_conheight.integer * 0.68f + hudoffsety;
 
 	DrawQ_String(x, y, text, 0, 16, 16, 1, 0.9f, 0.5f, 1, 0, NULL, true, FONT_CENTERPRINT);
 }

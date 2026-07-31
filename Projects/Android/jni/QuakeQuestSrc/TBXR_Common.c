@@ -2078,11 +2078,13 @@ void TBXR_submitFrame()
 
 	XrFovf fov = {};
 	XrPosef viewTransform[2];
+	XrPosef stageFromEye[2];
 
 	for (int eye = 0; eye < ovrMaxNumEyes; eye++) {
 		XrPosef xfHeadFromEye = gAppState.Projections[eye].pose;
 		XrPosef xfStageFromEye = XrPosef_Multiply(gAppState.xfStageFromHead, xfHeadFromEye);
 		viewTransform[eye] = XrPosef_Inverse(xfStageFromEye);
+		stageFromEye[eye] = xfStageFromEye;
         fov.angleLeft += gAppState.Projections[eye].fov.angleLeft / 2.0f;
         fov.angleRight += gAppState.Projections[eye].fov.angleRight / 2.0f;
         fov.angleUp += gAppState.Projections[eye].fov.angleUp / 2.0f;
@@ -2110,8 +2112,9 @@ void TBXR_submitFrame()
 
 			memset(&projection_layer_elements[eye], 0, sizeof(XrCompositionLayerProjectionView));
 			projection_layer_elements[eye].type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW;
-			projection_layer_elements[eye].pose = gAppState.xfStageFromHead;
-			projection_layer_elements[eye].fov = fov;
+			//Must match what the game rendered with, which is the per eye view the runtime reported
+			projection_layer_elements[eye].pose = stageFromEye[eye];
+			projection_layer_elements[eye].fov = gAppState.Projections[eye].fov;
 			memset(&projection_layer_elements[eye].subImage, 0, sizeof(XrSwapchainSubImage));
 			projection_layer_elements[eye].subImage.swapchain =
 					frameBuffer->ColorSwapChain.Handle;

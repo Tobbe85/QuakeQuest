@@ -1,5 +1,6 @@
 
 #include "quakedef.h"
+#include <stdbool.h>
 #include "cl_video.h"
 #include "image.h"
 #include "jpeg.h"
@@ -180,6 +181,7 @@ static void SCR_DrawCenterString (void)
 	int		x, y;
 	int		remaining;
 	int		color;
+	float	hudOffsetX, hudOffsetY;
 
 	if(cl.intermission == 2) // in finale,
 		if(sb_showscores) // make TAB hide the finale message (sb_showscores overrides finale in sbar.c)
@@ -200,8 +202,10 @@ static void SCR_DrawCenterString (void)
 	if (remaining < 1)
 		return;
 
+	GetHUDOffset(&hudOffsetX, &hudOffsetY);
+
 	//Lowered to be visible in the GVR
-	y = (int)(vid_conheight.integer*0.5);
+	y = (int)(vid_conheight.integer*0.5 + hudOffsetY);
 
 	color = -1;
 	do
@@ -211,7 +215,7 @@ static void SCR_DrawCenterString (void)
 		int l = newline ? (newline - start) : (int)strlen(start);
 		float width = DrawQ_TextWidth(start, l, 8, 8, false, FONT_CENTERPRINT);
 
-		x = (int) (vid_conwidth.integer - width)/2 + (r_stereo_side == 0 ? 10 : -10);
+		x = (int) ((vid_conwidth.integer - width)/2 + (r_stereo_side == 0 ? 10 : -10) + hudOffsetX);
 		if (l > 0)
 		{
 			if (remaining < l)
@@ -2074,6 +2078,7 @@ void R_ClearScreen(qboolean fogcolor)
 extern int r_stereo_side;
 
 float GetFOV();
+bool VR_GetMaxFovTangents(float *tanX, float *tanY);
 
 /*static*/ void SCR_DrawScreen (int x, int y)
 {
@@ -2108,8 +2113,21 @@ float GetFOV();
 		// for a 4x3 display, if the ratio is not 4x3 this makes the fov
 		// higher/lower according to the ratio
 		r_refdef.view.useperspective = true;
-		r_refdef.view.frustum_y = tan(GetFOV() * M_PI / 360.0) * /*(3.0/4.0) * */ cl.viewzoom;
-		r_refdef.view.frustum_x = r_refdef.view.frustum_y * (float)r_refdef.view.width / (float)r_refdef.view.height / vid_pixelheight.value;
+		{
+			float tanx, tany;
+			//The eye projection comes from the runtime and is asymmetric, so cull with the
+			//widest tangent of either eye rather than a frustum derived from the aspect ratio
+			if (VR_GetMaxFovTangents(&tanx, &tany))
+			{
+				r_refdef.view.frustum_y = tany * cl.viewzoom;
+				r_refdef.view.frustum_x = tanx * cl.viewzoom;
+			}
+			else
+			{
+				r_refdef.view.frustum_y = tan(GetFOV() * M_PI / 360.0) * /*(3.0/4.0) * */ cl.viewzoom;
+				r_refdef.view.frustum_x = r_refdef.view.frustum_y * (float)r_refdef.view.width / (float)r_refdef.view.height / vid_pixelheight.value;
+			}
+		}
 
 		r_refdef.view.frustum_x *= r_refdef.frustumscale_x;
 		r_refdef.view.frustum_y *= r_refdef.frustumscale_y;

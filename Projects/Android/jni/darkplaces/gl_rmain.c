@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_main.c
 
 #include "quakedef.h"
+#include <stdbool.h>
 #include "cl_dyntexture.h"
 #include "r_shadow.h"
 #include "polygon.h"
@@ -52,15 +53,30 @@ static qboolean r_gpuskeletal;
 cvar_t vr_worldscale = {CVAR_SAVE, "vr_worldscale", "26.2467", "VR World scale multiplier"};
 
 qboolean VR_UseScreenLayer();
+float VR_GetIPD();
+bool VR_GetOffCenterFov(int eye, float *offsetX, float *offsetY);
 
 float GetStereoSeparation()
 {
-	return VR_UseScreenLayer() ? 0.0f : vr_worldscale.value * 0.065f;
+	return VR_UseScreenLayer() ? 0.0f : vr_worldscale.value * VR_GetIPD();
 }
 
 
 //Define the stereo side we are drawing
 int r_stereo_side;
+
+//Console units a 2D element must move so that it appears straight ahead of this eye.
+//Needed because the runtime frustum is asymmetric, so the eye buffer centre is not the
+//forward axis. Elements that the player fuses at depth need this or they diverge.
+void GetHUDOffset(float *x, float *y)
+{
+	float offsetX = 0.0f, offsetY = 0.0f;
+
+	VR_GetOffCenterFov(r_stereo_side, &offsetX, &offsetY);
+
+	*x = offsetX * vid_conwidth.integer;
+	*y = offsetY * vid_conheight.integer;
+}
 
 //
 // screen size info
