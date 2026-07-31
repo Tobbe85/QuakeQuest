@@ -2176,6 +2176,7 @@ float GetFOV();
 			Sbar_Draw();
 		SHOWLMP_drawall();
 		SCR_CheckDrawCenterString();
+		R_WeaponWheel_DrawText();
 	}
 	SCR_DrawNetGraph ();
 	MR_Draw();

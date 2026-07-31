@@ -2990,7 +2990,7 @@ static void M_Reset_Draw (void)
 	M_Print(8 + 4 * (linelength - 11), 16, "Press y / n");
 }
 
-#define	YAWCONTROL_ITEMS	6
+#define	YAWCONTROL_ITEMS	7
 
 static int controllermode_cursor;
 
@@ -3091,6 +3091,10 @@ static void M_Menu_Controller_Key (int key, int ascii)
 
 			Cvar_SetValueQuick (&vr_yawmode, newYawMode);
 		}
+		else if (controllermode_cursor == 6)
+		{
+			Cvar_SetValueQuick (&vr_weaponwheel, 1 - vr_weaponwheel.integer);
+		}
 		else
 			M_Menu_Controller_AdjustSliders(-1);
 		break;
@@ -3116,6 +3120,10 @@ static void M_Menu_Controller_Key (int key, int ascii)
 				newYawMode = 0;
 
 			Cvar_SetValueQuick (&vr_yawmode, newYawMode);
+		}
+		else if (controllermode_cursor == 6)
+		{
+			Cvar_SetValueQuick (&vr_weaponwheel, 1 - vr_weaponwheel.integer);
 		}
 		else
 			M_Menu_Controller_AdjustSliders(1);
@@ -3167,6 +3175,12 @@ static void M_Menu_Controller_Draw (void)
 
 	M_Options_PrintSlider(  "        Snap Turn Angle", (vr_yawmode.integer == 1), cl_comfort.value, 30, 180);
 	M_Options_PrintSlider(  "      Smooth Turn Speed", (vr_yawmode.integer == 2), sensitivity.value, 1, 10);
+
+	if (vr_weaponwheel.integer == 0)
+		M_Options_PrintCommand("Weapon Wheel:     Off", true);
+	else
+		M_Options_PrintCommand("Weapon Wheel:     On", true);
+
 	if (vr_yawmode.integer >= 2)
 	{
 		M_Options_PrintCommand(" ", true);
@@ -3597,7 +3611,7 @@ static void M_Credits_Draw (void)
 			"   QQQQQQQQ           QQQQQQQQ      ",
 			"     QQQ                QQQ         ",
    			"      Q                  Q          ",
-	  		"      Q                  Q   v1.5.7");
+	  		"      Q                  Q   v1.6.0");
 
 	int i, l, linelength, firstline, lastline, lines;
 	for (i = 0, linelength = 0, firstline = 9999, lastline = -1;m_credits_message[i];i++)

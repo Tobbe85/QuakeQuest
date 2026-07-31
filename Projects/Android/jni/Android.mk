@@ -100,6 +100,7 @@ SRC_COMMON := \
 	darkplaces/r_lerpanim.c \
 	darkplaces/r_lightning.c \
 	darkplaces/r_lasersight.c \
+	darkplaces/r_weaponwheel.c \
 	darkplaces/r_modules.c \
 	darkplaces/r_shadow.c \
 	darkplaces/r_sky.c \

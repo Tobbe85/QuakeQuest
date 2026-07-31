@@ -4401,6 +4401,7 @@ void Render_Init(void)
 	R_Explosion_Init();
 	R_LightningBeams_Init();
 	R_LaserSights_Init();
+	R_WeaponWheel_Init();
 	Mod_RenderInit();
 }
 
@@ -7458,6 +7459,13 @@ void R_RenderScene(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture)
             R_DrawLaserSights();
             if (r_timereport_active)
                 R_TimeReport("lasersights");
+        }
+
+        if (weaponwheel_active)
+        {
+            R_DrawWeaponWheel();
+            if (r_timereport_active)
+                R_TimeReport("weaponwheel");
         }
 	}
 
