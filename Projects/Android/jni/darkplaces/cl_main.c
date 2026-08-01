@@ -342,6 +342,9 @@ void CL_Disconnect(void)
 
 	Con_DPrintf("CL_Disconnect\n");
 
+	// a level change with the grip held must not leave the game in slow motion
+	CL_WeaponWheel_Close();
+
     Cvar_SetValueQuick(&csqc_progcrc, -1);
 	Cvar_SetValueQuick(&csqc_progsize, -1);
 	CL_VM_ShutDown();
@@ -1368,6 +1371,8 @@ static void CL_UpdateViewModel(void)
 	ent->state_current.flags = RENDER_VIEWMODEL;
 	if ((cl.stats[STAT_HEALTH] <= 0 && cl_deathnoviewmodel.integer) || cl.intermission)
 		ent->state_current.modelindex = 0;
+	else if (weaponwheel_active)
+		ent->state_current.modelindex = 0;	// the wheel replaces the held weapon
 	else if (cl.stats[STAT_ITEMS] & IT_INVISIBILITY)
 	{
 		if (gamemode == GAME_TRANSFUSION)
@@ -2002,6 +2007,8 @@ void CL_UpdateWorld(void)
 
 		CL_RelinkLightFlashes();
 		CSQC_RelinkAllEntities(ENTMASK_ENGINE | ENTMASK_ENGINEVIEWMODELS);
+
+		CL_WeaponWheel_Relink();
 
 		// decals, particles, and explosions will be updated during rneder
 	}

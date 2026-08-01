@@ -640,6 +640,27 @@ void Sbar_Init(void);
 void R_LightningBeams_Init(void);
 void R_LaserSights_Init(void);
 void Mod_RenderInit(void);
+
+// Console units that a view centred 2D element must move to correct for the
+// asymmetric eye frustum the OpenXR runtime reports. Both are 0 on the big screen.
+void GetHUDOffset(float *x, float *y);
+
+// r_weaponwheel.c
+void R_WeaponWheel_Init(void);
+void R_DrawWeaponWheel(void);
+void R_WeaponWheel_DrawText(void);
+qboolean CL_WeaponWheel_CanOpen(void);
+void CL_WeaponWheel_Open(void);
+void CL_WeaponWheel_Close(void);
+void CL_WeaponWheel_Select(void);
+void CL_WeaponWheel_Relink(void);
+extern int weaponwheel_active;
+extern float weaponwheel_angles[3];
+extern float weaponwheel_cursor[2];
+extern int weaponwheel_selection;
+extern cvar_t vr_weaponwheel;
+extern cvar_t vr_weaponwheel_deflection;
+
 void Font_Init(void);
 
 qboolean R_CompileShader_CheckStaticParms(void);

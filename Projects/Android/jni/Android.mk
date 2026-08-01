@@ -7,7 +7,7 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE			:= quakequest
-LOCAL_LDLIBS			:= -llog -landroid -lGLESv3 -lEGL -lOpenSLES		# include default libraries
+LOCAL_LDLIBS			:= -llog -landroid -lGLESv3 -lEGL -lOpenSLES -ldl		# include default libraries
 
 LOCAL_C_INCLUDES := ../QuakeQuestSrc/ \
     ../darkplaces/ \
@@ -16,7 +16,7 @@ LOCAL_C_INCLUDES := ../QuakeQuestSrc/ \
 	${TOP_DIR}/OpenXR-SDK/src/common
 
 
-LOCAL_SHARED_LIBRARIES	:= openxr_loader libvorbis libogg libvorbis-jni
+LOCAL_SHARED_LIBRARIES	:= libvorbis libogg libvorbis-jni
 
 SRC_SND_COMMON := \
 	darkplaces/snd_opensl.c \
@@ -100,6 +100,7 @@ SRC_COMMON := \
 	darkplaces/r_lerpanim.c \
 	darkplaces/r_lightning.c \
 	darkplaces/r_lasersight.c \
+	darkplaces/r_weaponwheel.c \
 	darkplaces/r_modules.c \
 	darkplaces/r_shadow.c \
 	darkplaces/r_sky.c \
@@ -138,4 +139,3 @@ LOCAL_SRC_FILES := \
 include $(BUILD_SHARED_LIBRARY)
 include $(SUPPORT_LIBS)/liboggvorbis/Android.mk
 
-$(call import-module,AndroidPrebuilt/jni)

@@ -329,32 +329,93 @@ void VR_FrameSetup()
 
 }
 
+//True when the runtime eye views are available and the game is drawing in stereo
+static bool VR_EyeViewsValid()
+{
+	return (gAppState.SessionActive && gAppState.Projections != NULL && !VR_UseScreenLayer());
+}
+
 bool VR_GetVRProjection(int eye, float zNear, float zFar, float* projection)
 {
-    if (strstr(gAppState.OpenXRHMD, "pico") != NULL)
-    {
-        XrMatrix4x4f_CreateProjectionFov(
-                &(gAppState.ProjectionMatrices[eye]), GRAPHICS_OPENGL_ES,
-                gAppState.Projections[eye].fov, zNear, zFar);
-    }
+	//The big screen is a flat quad, so let the engine build its own symmetric matrix
+	if (!VR_EyeViewsValid())
+	{
+		return false;
+	}
 
-    if (strstr(gAppState.OpenXRHMD, "meta") != NULL)
-    {
-        XrFovf fov = {};
-        for (int eye = 0; eye < ovrMaxNumEyes; eye++)
-        {
-            fov.angleLeft += gAppState.Projections[eye].fov.angleLeft / 2.0f;
-            fov.angleRight += gAppState.Projections[eye].fov.angleRight / 2.0f;
-            fov.angleUp += gAppState.Projections[eye].fov.angleUp / 2.0f;
-            fov.angleDown += gAppState.Projections[eye].fov.angleDown / 2.0f;
-        }
-        XrMatrix4x4f_CreateProjectionFov(
-                &(gAppState.ProjectionMatrices[eye]), GRAPHICS_OPENGL_ES,
-                fov, zNear, zFar);
-    }
+	XrMatrix4x4f_CreateProjectionFov(
+			&(gAppState.ProjectionMatrices[eye]), GRAPHICS_OPENGL_ES,
+			gAppState.Projections[eye].fov, zNear, zFar);
 
 	memcpy(projection, gAppState.ProjectionMatrices[eye].m, 16 * sizeof(float));
 	return true;
+}
+
+//Widest tangent of either eye on each axis. The engine culls with a single symmetric
+//frustum, so it has to cover the union of both asymmetric eye frusta or geometry pops.
+bool VR_GetMaxFovTangents(float *tanX, float *tanY)
+{
+	if (!VR_EyeViewsValid())
+	{
+		return false;
+	}
+
+	*tanX = 0.0f;
+	*tanY = 0.0f;
+	for (int eye = 0; eye < ovrMaxNumEyes; eye++)
+	{
+		const XrFovf fov = gAppState.Projections[eye].fov;
+		*tanX = fmaxf(*tanX, fmaxf(fabsf(tanf(fov.angleLeft)), fabsf(tanf(fov.angleRight))));
+		*tanY = fmaxf(*tanY, fmaxf(fabsf(tanf(fov.angleUp)), fabsf(tanf(fov.angleDown))));
+	}
+
+	return (*tanX > 0.0f && *tanY > 0.0f);
+}
+
+//Fraction of the screen a 2D element must move to sit on the eye's forward axis.
+//An asymmetric frustum puts that axis away from the centre of the eye buffer, so a
+//HUD element drawn at the centre of both eye buffers would otherwise diverge.
+bool VR_GetOffCenterFov(int eye, float *offsetX, float *offsetY)
+{
+	if (!VR_EyeViewsValid())
+	{
+		return false;
+	}
+
+	const XrFovf fov = gAppState.Projections[eye].fov;
+	const float l = tanf(fov.angleLeft);
+	const float r = tanf(fov.angleRight);
+	const float u = tanf(fov.angleUp);
+	const float d = tanf(fov.angleDown);
+
+	if ((r - l) < 0.0001f || (u - d) < 0.0001f)
+	{
+		return false;
+	}
+
+	*offsetX = -(r + l) / (r - l) * 0.5f;
+	//Console coordinates grow downwards, normalised device coordinates grow upwards
+	*offsetY = (u + d) / (u - d) * 0.5f;
+	return true;
+}
+
+//Interpupillary distance in metres, measured from the runtime eye poses
+float VR_GetIPD()
+{
+	if (!gAppState.SessionActive || gAppState.Projections == NULL)
+	{
+		return 0.065f;
+	}
+
+	const XrVector3f *l = &gAppState.Projections[0].pose.position;
+	const XrVector3f *r = &gAppState.Projections[1].pose.position;
+	const float dx = r->x - l->x;
+	const float dy = r->y - l->y;
+	const float dz = r->z - l->z;
+	const float ipd = sqrtf(dx * dx + dy * dy + dz * dz);
+
+	//A runtime that has not reported a pose yet gives 0, which would flatten the stereo
+	return (ipd > 0.02f && ipd < 0.1f) ? ipd : 0.065f;
 }
 
 
@@ -649,6 +710,10 @@ static void HandleInput_Default(  )
 
 	if (textInput)
     {
+        //the grip types characters in this mode, so the wheel must not stay up
+        if (weaponwheel_active)
+            CL_WeaponWheel_Close();
+
         //Toggle text input
         if ((leftTrackedRemoteState_new.Buttons & xrButton_Y) &&
             (leftTrackedRemoteState_new.Buttons & xrButton_Y) !=
@@ -749,9 +814,42 @@ static void HandleInput_Default(  )
 							   powf(offHandRemoteTracking->Pose.position.z - dominantRemoteTracking->Pose.position.z, 2));
 
         //dominant hand stuff first
-        weapon_stabilised = distance < 0.5f &&
+        weapon_stabilised = !weaponwheel_active &&
+                distance < 0.5f &&
                 (offHandTrackedRemoteState->Buttons & xrButton_GripTrigger) &&
                 cl.stats[STAT_ACTIVEWEAPON] != IT_AXE;
+
+        //Hold both triggers and both grips together for 3 seconds to give all weapons
+        {
+            static double allWeaponsHeldSince = 0.0;
+            static qboolean allWeaponsGiven = false;
+            const uint32_t combo = xrButton_Trigger | xrButton_GripTrigger;
+
+            if (bigScreen == 0 &&
+                (leftTrackedRemoteState_new.Buttons & combo) == combo &&
+                (rightTrackedRemoteState_new.Buttons & combo) == combo)
+            {
+                double now = TBXR_GetTimeInMilliSeconds();
+
+                if (allWeaponsHeldSince == 0.0)
+                {
+                    allWeaponsHeldSince = now;
+                }
+                else if (!allWeaponsGiven && (now - allWeaponsHeldSince) >= 3000.0)
+                {
+                    allWeaponsGiven = true;
+                    CL_WeaponWheel_Close();
+                    Cbuf_AddText("impulse 9\n");
+                    SCR_CenterPrint("All Weapons Given");
+                    TBXR_Vibrate(500, 3, 1.0f);
+                }
+            }
+            else
+            {
+                allWeaponsHeldSince = 0.0;
+                allWeaponsGiven = false;
+            }
+        }
 
         {
             weaponOffset[0] = dominantRemoteTracking->Pose.position.x - hmdPosition[0];
@@ -787,8 +885,63 @@ static void HandleInput_Default(  )
 
             gunangles[YAW] += yawOffset;
 
+            //Weapon wheel - hold the dominant grip, point at a weapon, release to select it
+            {
+                qboolean gripNow = (dominantTrackedRemoteState->Buttons & xrButton_GripTrigger) != 0;
+                qboolean gripWas = (dominantTrackedRemoteStateOld->Buttons & xrButton_GripTrigger) != 0;
+
+                if (weaponwheel_active)
+                {
+                    if (bigScreen != 0 || !CL_WeaponWheel_CanOpen())
+                    {
+                        //death, intermission, the menu or a level change cancels the selection
+                        CL_WeaponWheel_Close();
+                    }
+                    else if (!gripNow)
+                    {
+                        CL_WeaponWheel_Select();
+                    }
+                    else
+                    {
+                        //22.5 degrees of wrist rotation moves the cursor to the edge of the disc
+                        float deflection = bound(5.0f, vr_weaponwheel_deflection.value, 60.0f);
+                        float x = sinf(DEG2RAD(weaponwheel_angles[YAW] - gunangles[YAW])) / sinf(DEG2RAD(deflection));
+                        float y = (weaponwheel_angles[PITCH] - gunangles[PITCH]) / deflection;
+                        float len = length(x, y);
+
+                        if (len > 1.0f)
+                        {
+                            x /= len;
+                            y /= len;
+                        }
+                        weaponwheel_cursor[0] = x;
+                        weaponwheel_cursor[1] = y;
+                    }
+                }
+                else if (gripNow && !gripWas && bigScreen == 0 &&
+                         !weapon_stabilised && CL_WeaponWheel_CanOpen())
+                {
+                    //freeze the plane where the controller already points, so the cursor starts
+                    //centred whatever vr_weaponpitchadjust is set to
+                    weaponwheel_angles[PITCH] = gunangles[PITCH];
+                    weaponwheel_angles[YAW] = gunangles[YAW];
+                    weaponwheel_angles[ROLL] = 0.0f;
+                    weaponwheel_cursor[0] = 0.0f;
+                    weaponwheel_cursor[1] = 0.0f;
+                    CL_WeaponWheel_Open();
+                }
+
+                //Suppress fire while the wheel is up. Masking the live state means the release
+                //and the re-press both reach the engine as normal key events.
+                if (weaponwheel_active)
+                {
+                    dominantTrackedRemoteState->Buttons &= ~xrButton_Trigger;
+                }
+            }
+
             //Change laser sight on joystick click
-            if ((dominantTrackedRemoteState->Buttons & xrButton_Joystick) &&
+            if (!weaponwheel_active &&
+                (dominantTrackedRemoteState->Buttons & xrButton_Joystick) &&
                 (dominantTrackedRemoteState->Buttons & xrButton_Joystick) !=
                 (dominantTrackedRemoteStateOld->Buttons & xrButton_Joystick)) {
                 Cvar_SetValueQuick(&r_lasersight, (r_lasersight.integer + 1) % 3);
@@ -831,8 +984,11 @@ static void HandleInput_Default(  )
             oldtime = t;
             if (delta > 1000)
                 delta = 1000;
-            QC_MotionEvent(delta, rightTrackedRemoteState_new.Joystick.x,
-                           rightTrackedRemoteState_new.Joystick.y);
+            //Freeze the turn while the weapon wheel is up, otherwise the frozen wheel plane and
+            //the live aim drift apart and the cursor moves on its own
+            QC_MotionEvent(delta,
+                           weaponwheel_active ? 0.0f : rightTrackedRemoteState_new.Joystick.x,
+                           weaponwheel_active ? 0.0f : rightTrackedRemoteState_new.Joystick.y);
 
             if (bigScreen != 0) {
 
@@ -873,8 +1029,9 @@ static void HandleInput_Default(  )
 					//Unused
 				}
 
+				if (!vr_weaponwheel.integer)
 				{
-					//Weapon/Inventory Chooser
+					//Weapon/Inventory Chooser, the fallback when the wheel is turned off
 					int rightJoyState = (rightTrackedRemoteState_new.Joystick.y < -0.7f ? 1 : 0);
 					if (rightJoyState != (rightTrackedRemoteState_old.Joystick.y < -0.7f ? 1 : 0)) {
 						QC_KeyEvent(rightJoyState, '/', 0);
