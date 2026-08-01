@@ -1,0 +1,59 @@
+{
+  "_comment": [
+    "QuakeQuest weapon wheel configuration.",
+    "Each key is a mod name. It matches the -game directory, or the mission pack directory,",
+    "or 'id1' for the base game. Type 'weaponwheel_reload' in the console to see the mod name",
+    "the game is using and the weapons it found. The key 'default' covers every mod that has",
+    "no entry of its own.",
+    "",
+    "Each weapon needs 4 fields:",
+    "  name     the text shown when you point at the weapon",
+    "  item     the inventory bit the weapon sets in STAT_ITEMS. Give a name from the list",
+    "           below, or a plain number for a mod that uses its own bits.",
+    "  impulse  the console impulse that selects the weapon",
+    "  model    the model shown on the wheel. A missing model leaves the slot empty.",
+    "",
+    "Known item names: IT_AXE, IT_SHOTGUN, IT_SUPER_SHOTGUN, IT_NAILGUN, IT_SUPER_NAILGUN,",
+    "IT_GRENADE_LAUNCHER, IT_ROCKET_LAUNCHER, IT_LIGHTNING, IT_SUPER_LIGHTNING,",
+    "HIT_PROXIMITY_GUN, HIT_MJOLNIR, HIT_LASER_CANNON, RIT_AXE, RIT_LAVA_NAILGUN,",
+    "RIT_LAVA_SUPER_NAILGUN, RIT_MULTI_GRENADE, RIT_MULTI_ROCKET, RIT_PLASMA_GUN.",
+    "",
+    "The order of the list is the order around the ring. The first weapon sits at the top.",
+    "A maximum of 16 weapons fit on the wheel."
+  ],
+
+  "default": [
+    { "name": "Axe",              "item": "IT_AXE",              "impulse": 1, "model": "progs/v_axe.mdl" },
+    { "name": "Shotgun",          "item": "IT_SHOTGUN",          "impulse": 2, "model": "progs/v_shot.mdl" },
+    { "name": "Super Shotgun",    "item": "IT_SUPER_SHOTGUN",    "impulse": 3, "model": "progs/v_shot2.mdl" },
+    { "name": "Nailgun",          "item": "IT_NAILGUN",          "impulse": 4, "model": "progs/v_nail.mdl" },
+    { "name": "Super Nailgun",    "item": "IT_SUPER_NAILGUN",    "impulse": 5, "model": "progs/v_nail2.mdl" },
+    { "name": "Grenade Launcher", "item": "IT_GRENADE_LAUNCHER", "impulse": 6, "model": "progs/v_rock.mdl" },
+    { "name": "Rocket Launcher",  "item": "IT_ROCKET_LAUNCHER",  "impulse": 7, "model": "progs/v_rock2.mdl" },
+    { "name": "Thunderbolt",      "item": "IT_LIGHTNING",        "impulse": 8, "model": "progs/v_light.mdl" }
+  ],
+
+  "hipnotic": [
+    { "name": "Axe",              "item": "IT_AXE",              "impulse": 1,   "model": "progs/v_axe.mdl" },
+    { "name": "Mjolnir",          "item": "HIT_MJOLNIR",         "impulse": 226, "model": "progs/v_hammer.mdl" },
+    { "name": "Shotgun",          "item": "IT_SHOTGUN",          "impulse": 2,   "model": "progs/v_shot.mdl" },
+    { "name": "Super Shotgun",    "item": "IT_SUPER_SHOTGUN",    "impulse": 3,   "model": "progs/v_shot2.mdl" },
+    { "name": "Nailgun",          "item": "IT_NAILGUN",          "impulse": 4,   "model": "progs/v_nail.mdl" },
+    { "name": "Super Nailgun",    "item": "IT_SUPER_NAILGUN",    "impulse": 5,   "model": "progs/v_nail2.mdl" },
+    { "name": "Grenade Launcher", "item": "IT_GRENADE_LAUNCHER", "impulse": 6,   "model": "progs/v_rock.mdl" },
+    { "name": "Rocket Launcher",  "item": "IT_ROCKET_LAUNCHER",  "impulse": 7,   "model": "progs/v_rock2.mdl" },
+    { "name": "Thunderbolt",      "item": "IT_LIGHTNING",        "impulse": 8,   "model": "progs/v_light.mdl" },
+    { "name": "Laser Cannon",     "item": "HIT_LASER_CANNON",    "impulse": 225, "model": "progs/v_laserg.mdl" }
+  ],
+
+  "rogue": [
+    { "name": "Axe",              "item": "RIT_AXE",             "impulse": 1, "model": "progs/v_axe.mdl" },
+    { "name": "Shotgun",          "item": "IT_SHOTGUN",          "impulse": 2, "model": "progs/v_shot.mdl" },
+    { "name": "Super Shotgun",    "item": "IT_SUPER_SHOTGUN",    "impulse": 3, "model": "progs/v_shot2.mdl" },
+    { "name": "Nailgun",          "item": "IT_NAILGUN",          "impulse": 4, "model": "progs/v_nail.mdl" },
+    { "name": "Super Nailgun",    "item": "IT_SUPER_NAILGUN",    "impulse": 5, "model": "progs/v_nail2.mdl" },
+    { "name": "Grenade Launcher", "item": "IT_GRENADE_LAUNCHER", "impulse": 6, "model": "progs/v_rock.mdl" },
+    { "name": "Rocket Launcher",  "item": "IT_ROCKET_LAUNCHER",  "impulse": 7, "model": "progs/v_rock2.mdl" },
+    { "name": "Thunderbolt",      "item": "IT_LIGHTNING",        "impulse": 8, "model": "progs/v_light.mdl" }
+  ]
+}

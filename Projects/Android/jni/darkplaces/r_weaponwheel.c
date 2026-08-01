@@ -13,6 +13,7 @@ cvar_t vr_weaponwheel_modelyaw = {CVAR_SAVE, "vr_weaponwheel_modelyaw", "-145", 
 cvar_t vr_weaponwheel_spin = {CVAR_SAVE, "vr_weaponwheel_spin", "45", "degrees per second that the weapon models turn on the wheel, 0 stops them"};
 cvar_t vr_weaponwheel_deflection = {CVAR_SAVE, "vr_weaponwheel_deflection", "22.5", "degrees of controller rotation needed to move the cursor to the edge of the wheel"};
 cvar_t vr_weaponwheel_slowmo = {CVAR_SAVE, "vr_weaponwheel_slowmo", "0.3", "game speed while the weapon wheel is open, 1 disables the slow down"};
+cvar_t vr_weaponwheel_scan = {0, "vr_weaponwheel_scan", "0", "print the item bits, the active weapon and the view model whenever they change, to help write a weaponwheel.json section for a mod"};
 
 // written by the VR layer
 int weaponwheel_active;
@@ -29,41 +30,60 @@ extern cvar_t slowmo;
 void R_DrawBLineMesh(vec3_t mins, vec3_t maxs, float thickness, float cr, float cg, float cb, float ca);
 void TBXR_Vibrate(int duration, int chan, float intensity);
 
+#define WEAPONWHEEL_CONFIG "weaponwheel.json"
+#define MAX_WHEEL_SLOTS 16
+
 typedef struct wheelweapon_s
 {
 	int itembit;
 	int impulse;
-	const char *modelname;
-	const char *name;
-	int ammostat;	// -1 when the weapon needs no ammo
+	char modelname[MAX_QPATH];
+	char name[64];
 }
 wheelweapon_t;
 
-// impulse and item bit values must agree with IN_BestWeapon_ResetData in cl_input.c
-static const wheelweapon_t wheelweapons_quake[] =
+// used when weaponwheel.json is missing or unreadable. The impulse and item bit values agree
+// with IN_BestWeapon_ResetData in cl_input.c.
+static const wheelweapon_t wheelweapons_builtin[] =
 {
-	{IT_AXE,				1, "progs/v_axe.mdl",	"Axe",				-1},
-	{IT_SHOTGUN,			2, "progs/v_shot.mdl",	"Shotgun",			STAT_SHELLS},
-	{IT_SUPER_SHOTGUN,		3, "progs/v_shot2.mdl",	"Super Shotgun",	STAT_SHELLS},
-	{IT_NAILGUN,			4, "progs/v_nail.mdl",	"Nailgun",			STAT_NAILS},
-	{IT_SUPER_NAILGUN,		5, "progs/v_nail2.mdl",	"Super Nailgun",	STAT_NAILS},
-	{IT_GRENADE_LAUNCHER,	6, "progs/v_rock.mdl",	"Grenade Launcher",	STAT_ROCKETS},
-	{IT_ROCKET_LAUNCHER,	7, "progs/v_rock2.mdl",	"Rocket Launcher",	STAT_ROCKETS},
-	{IT_LIGHTNING,			8, "progs/v_light.mdl",	"Thunderbolt",		STAT_CELLS},
+	{IT_AXE,				1, "progs/v_axe.mdl",	"Axe"},
+	{IT_SHOTGUN,			2, "progs/v_shot.mdl",	"Shotgun"},
+	{IT_SUPER_SHOTGUN,		3, "progs/v_shot2.mdl",	"Super Shotgun"},
+	{IT_NAILGUN,			4, "progs/v_nail.mdl",	"Nailgun"},
+	{IT_SUPER_NAILGUN,		5, "progs/v_nail2.mdl",	"Super Nailgun"},
+	{IT_GRENADE_LAUNCHER,	6, "progs/v_rock.mdl",	"Grenade Launcher"},
+	{IT_ROCKET_LAUNCHER,	7, "progs/v_rock2.mdl",	"Rocket Launcher"},
+	{IT_LIGHTNING,			8, "progs/v_light.mdl",	"Thunderbolt"},
 };
 
-// impulses 225 and 226 are the hipnotic weapon selectors that IN_BestWeapon_ResetData documents.
-// The proximity gun and every Dissolution of Eternity weapon are left out on purpose: those mods
-// toggle two weapons on one impulse, and Rogue reuses the stock item bits for different weapons.
-static const wheelweapon_t wheelweapons_hipnotic[] =
+// lets the config name a bit instead of writing the number. Any other value can be given as a
+// plain number, which is what a mod with its own item bits needs.
+static const struct { const char *name; int bit; } wheelitembits[] =
 {
-	{HIT_LASER_CANNON,	225, "progs/v_laserg.mdl",	"Laser Cannon",	STAT_CELLS},
-	{HIT_MJOLNIR,		226, "progs/v_hammer.mdl",	"Mjolnir",		-1},
+	{"IT_SHOTGUN", IT_SHOTGUN},
+	{"IT_SUPER_SHOTGUN", IT_SUPER_SHOTGUN},
+	{"IT_NAILGUN", IT_NAILGUN},
+	{"IT_SUPER_NAILGUN", IT_SUPER_NAILGUN},
+	{"IT_GRENADE_LAUNCHER", IT_GRENADE_LAUNCHER},
+	{"IT_ROCKET_LAUNCHER", IT_ROCKET_LAUNCHER},
+	{"IT_LIGHTNING", IT_LIGHTNING},
+	{"IT_SUPER_LIGHTNING", IT_SUPER_LIGHTNING},
+	{"IT_AXE", IT_AXE},
+	{"HIT_PROXIMITY_GUN", HIT_PROXIMITY_GUN},
+	{"HIT_MJOLNIR", HIT_MJOLNIR},
+	{"HIT_LASER_CANNON", HIT_LASER_CANNON},
+	{"RIT_AXE", RIT_AXE},
+	{"RIT_LAVA_NAILGUN", RIT_LAVA_NAILGUN},
+	{"RIT_LAVA_SUPER_NAILGUN", RIT_LAVA_SUPER_NAILGUN},
+	{"RIT_MULTI_GRENADE", RIT_MULTI_GRENADE},
+	{"RIT_MULTI_ROCKET", RIT_MULTI_ROCKET},
+	{"RIT_PLASMA_GUN", RIT_PLASMA_GUN},
 };
 
-#define WHEEL_NUM_QUAKE ((int)(sizeof(wheelweapons_quake) / sizeof(wheelweapons_quake[0])))
-#define WHEEL_NUM_HIPNOTIC ((int)(sizeof(wheelweapons_hipnotic) / sizeof(wheelweapons_hipnotic[0])))
-#define MAX_WHEEL_SLOTS (WHEEL_NUM_QUAKE + WHEEL_NUM_HIPNOTIC)
+static wheelweapon_t wheelweapons[MAX_WHEEL_SLOTS];
+static int wheelweaponcount;
+static char wheelconfigmod[MAX_QPATH];
+static qboolean wheelconfigloaded;
 
 typedef struct wheelslot_s
 {
@@ -82,6 +102,8 @@ static vec3_t wheelcursorworld;
 static float wheel_savedslowmo = 1.0f;
 static qboolean wheel_slowmoactive = false;
 
+static void CL_WeaponWheel_Reload_f(void);
+
 void R_WeaponWheel_Init(void)
 {
 	Cvar_RegisterVariable(&vr_weaponwheel);
@@ -93,6 +115,397 @@ void R_WeaponWheel_Init(void)
 	Cvar_RegisterVariable(&vr_weaponwheel_spin);
 	Cvar_RegisterVariable(&vr_weaponwheel_deflection);
 	Cvar_RegisterVariable(&vr_weaponwheel_slowmo);
+	Cvar_RegisterVariable(&vr_weaponwheel_scan);
+	Cmd_AddCommand("weaponwheel_reload", CL_WeaponWheel_Reload_f, "re-read " WEAPONWHEEL_CONFIG " and list the weapons it gives for the current mod");
+}
+
+/*
+================================================================================
+
+weaponwheel.json
+
+The file is one object. Each key is a mod name as reported by com_modname, which is the -game
+directory, or the mission pack directory, or "id1" for the base game. The key "default" covers
+every mod that has no entry of its own. The value is the list of weapons in ring order.
+
+	{
+	  "default": [
+	    { "name": "Axe", "item": "IT_AXE", "impulse": 1, "model": "progs/v_axe.mdl" },
+	    ...
+	  ]
+	}
+
+FS_LoadFile searches the mod directory before id1, so a mod may ship its own copy.
+
+================================================================================
+*/
+
+typedef struct jsonparser_s
+{
+	const char *pos;
+	const char *end;
+}
+jsonparser_t;
+
+static void JSON_SkipWhite(jsonparser_t *parser)
+{
+	while (parser->pos < parser->end && (unsigned char)*parser->pos <= ' ')
+		parser->pos++;
+}
+
+// pass out = NULL to step over the string without keeping it
+static qboolean JSON_ParseString(jsonparser_t *parser, char *out, size_t outsize)
+{
+	size_t length = 0;
+
+	JSON_SkipWhite(parser);
+	if (parser->pos >= parser->end || *parser->pos != '"')
+		return false;
+	parser->pos++;
+
+	while (parser->pos < parser->end && *parser->pos != '"')
+	{
+		char c = *parser->pos++;
+
+		if (c == '\\' && parser->pos < parser->end)
+		{
+			c = *parser->pos++;
+			switch (c)
+			{
+			case 'n': c = '\n'; break;
+			case 't': c = '\t'; break;
+			case 'r': c = '\r'; break;
+			case 'b': c = '\b'; break;
+			case 'f': c = '\f'; break;
+			case 'u':
+				// no use for other alphabets here, so drop the code point
+				parser->pos += 4;
+				if (parser->pos > parser->end)
+					return false;
+				c = '?';
+				break;
+			default: break;
+			}
+		}
+
+		if (out && length + 1 < outsize)
+			out[length++] = c;
+	}
+
+	if (parser->pos >= parser->end)
+		return false;
+	parser->pos++;
+	if (out && outsize)
+		out[length] = 0;
+	return true;
+}
+
+static qboolean JSON_ParseNumber(jsonparser_t *parser, double *out)
+{
+	char buffer[64];
+	size_t length = 0;
+
+	JSON_SkipWhite(parser);
+	while (parser->pos < parser->end && *parser->pos != 0 && length + 1 < sizeof(buffer)
+		&& ((*parser->pos >= '0' && *parser->pos <= '9') || strchr("+-.eExXaAbBcCdDfF", *parser->pos)))
+		buffer[length++] = *parser->pos++;
+
+	if (!length)
+		return false;
+	buffer[length] = 0;
+	*out = strtod(buffer, NULL);
+	return true;
+}
+
+static qboolean JSON_SkipValue(jsonparser_t *parser)
+{
+	JSON_SkipWhite(parser);
+	if (parser->pos >= parser->end)
+		return false;
+
+	if (*parser->pos == '"')
+		return JSON_ParseString(parser, NULL, 0);
+
+	if (*parser->pos == '{' || *parser->pos == '[')
+	{
+		char open = *parser->pos;
+		char close = (open == '{') ? '}' : ']';
+		int depth = 0;
+
+		while (parser->pos < parser->end)
+		{
+			JSON_SkipWhite(parser);
+			if (parser->pos >= parser->end)
+				return false;
+			// strings are stepped over whole, so a bracket inside one cannot unbalance the count
+			if (*parser->pos == '"')
+			{
+				if (!JSON_ParseString(parser, NULL, 0))
+					return false;
+				continue;
+			}
+			if (*parser->pos == open)
+				depth++;
+			else if (*parser->pos == close)
+			{
+				depth--;
+				parser->pos++;
+				if (!depth)
+					return true;
+				continue;
+			}
+			parser->pos++;
+		}
+		return false;
+	}
+
+	while (parser->pos < parser->end && *parser->pos != ',' && *parser->pos != '}'
+		&& *parser->pos != ']' && (unsigned char)*parser->pos > ' ')
+		parser->pos++;
+	return true;
+}
+
+static int CL_WeaponWheel_ItemBitForName(const char *name)
+{
+	int i;
+	for (i = 0;i < (int)(sizeof(wheelitembits) / sizeof(wheelitembits[0]));i++)
+		if (!strcmp(wheelitembits[i].name, name))
+			return wheelitembits[i].bit;
+	Con_Printf("weapon wheel: unknown item bit \"%s\"\n", name);
+	return 0;
+}
+
+static qboolean CL_WeaponWheel_ParseWeapon(jsonparser_t *parser, wheelweapon_t *weapon)
+{
+	memset(weapon, 0, sizeof(*weapon));
+
+	JSON_SkipWhite(parser);
+	if (parser->pos >= parser->end || *parser->pos != '{')
+		return false;
+	parser->pos++;
+
+	for (;;)
+	{
+		char key[64];
+
+		JSON_SkipWhite(parser);
+		if (parser->pos >= parser->end)
+			return false;
+		if (*parser->pos == '}')
+		{
+			parser->pos++;
+			return true;
+		}
+		if (*parser->pos == ',')
+		{
+			parser->pos++;
+			continue;
+		}
+
+		if (!JSON_ParseString(parser, key, sizeof(key)))
+			return false;
+		JSON_SkipWhite(parser);
+		if (parser->pos >= parser->end || *parser->pos != ':')
+			return false;
+		parser->pos++;
+
+		if (!strcmp(key, "name"))
+		{
+			if (!JSON_ParseString(parser, weapon->name, sizeof(weapon->name)))
+				return false;
+		}
+		else if (!strcmp(key, "model"))
+		{
+			if (!JSON_ParseString(parser, weapon->modelname, sizeof(weapon->modelname)))
+				return false;
+		}
+		else if (!strcmp(key, "impulse"))
+		{
+			double value;
+			if (!JSON_ParseNumber(parser, &value))
+				return false;
+			weapon->impulse = (int)value;
+		}
+		else if (!strcmp(key, "item"))
+		{
+			JSON_SkipWhite(parser);
+			if (parser->pos < parser->end && *parser->pos == '"')
+			{
+				char bitname[64];
+				if (!JSON_ParseString(parser, bitname, sizeof(bitname)))
+					return false;
+				weapon->itembit = CL_WeaponWheel_ItemBitForName(bitname);
+			}
+			else
+			{
+				double value;
+				if (!JSON_ParseNumber(parser, &value))
+					return false;
+				weapon->itembit = (int)(unsigned int)value;
+			}
+		}
+		else if (!JSON_SkipValue(parser))
+			return false;
+	}
+}
+
+static qboolean CL_WeaponWheel_ParseWeaponList(jsonparser_t *parser)
+{
+	int count = 0;
+
+	JSON_SkipWhite(parser);
+	// accept both a bare array and an object with a "weapons" array
+	if (parser->pos < parser->end && *parser->pos == '{')
+	{
+		parser->pos++;
+		for (;;)
+		{
+			char key[64];
+
+			JSON_SkipWhite(parser);
+			if (parser->pos >= parser->end)
+				return false;
+			if (*parser->pos == '}')
+				return false;
+			if (*parser->pos == ',')
+			{
+				parser->pos++;
+				continue;
+			}
+			if (!JSON_ParseString(parser, key, sizeof(key)))
+				return false;
+			JSON_SkipWhite(parser);
+			if (parser->pos >= parser->end || *parser->pos != ':')
+				return false;
+			parser->pos++;
+			if (!strcmp(key, "weapons"))
+				break;
+			if (!JSON_SkipValue(parser))
+				return false;
+		}
+		JSON_SkipWhite(parser);
+	}
+
+	if (parser->pos >= parser->end || *parser->pos != '[')
+		return false;
+	parser->pos++;
+
+	for (;;)
+	{
+		wheelweapon_t weapon;
+
+		JSON_SkipWhite(parser);
+		if (parser->pos >= parser->end)
+			return false;
+		if (*parser->pos == ']')
+		{
+			parser->pos++;
+			wheelweaponcount = count;
+			return count > 0;
+		}
+		if (*parser->pos == ',')
+		{
+			parser->pos++;
+			continue;
+		}
+
+		if (!CL_WeaponWheel_ParseWeapon(parser, &weapon))
+			return false;
+		if (!weapon.itembit || !weapon.impulse)
+		{
+			Con_Printf("weapon wheel: \"%s\" needs both an item and an impulse, skipped\n", weapon.name);
+			continue;
+		}
+		if (count >= MAX_WHEEL_SLOTS)
+		{
+			Con_Printf("weapon wheel: more than %i weapons, the rest are ignored\n", MAX_WHEEL_SLOTS);
+			continue;
+		}
+		wheelweapons[count++] = weapon;
+	}
+}
+
+// walks the top level object looking for one key, and parses its value when it matches
+static qboolean CL_WeaponWheel_ParseSection(const char *file, fs_offset_t filesize, const char *wanted)
+{
+	jsonparser_t parser;
+
+	parser.pos = file;
+	parser.end = file + filesize;
+
+	JSON_SkipWhite(&parser);
+	if (parser.pos >= parser.end || *parser.pos != '{')
+		return false;
+	parser.pos++;
+
+	for (;;)
+	{
+		char key[MAX_QPATH];
+
+		JSON_SkipWhite(&parser);
+		if (parser.pos >= parser.end || *parser.pos == '}')
+			return false;
+		if (*parser.pos == ',')
+		{
+			parser.pos++;
+			continue;
+		}
+
+		if (!JSON_ParseString(&parser, key, sizeof(key)))
+			return false;
+		JSON_SkipWhite(&parser);
+		if (parser.pos >= parser.end || *parser.pos != ':')
+			return false;
+		parser.pos++;
+
+		if (!strcmp(key, wanted))
+			return CL_WeaponWheel_ParseWeaponList(&parser);
+		if (!JSON_SkipValue(&parser))
+			return false;
+	}
+}
+
+static void CL_WeaponWheel_UseBuiltinWeapons(void)
+{
+	wheelweaponcount = (int)(sizeof(wheelweapons_builtin) / sizeof(wheelweapons_builtin[0]));
+	memcpy(wheelweapons, wheelweapons_builtin, sizeof(wheelweapons_builtin));
+}
+
+static void CL_WeaponWheel_LoadConfig(void)
+{
+	fs_offset_t filesize = 0;
+	unsigned char *file;
+
+	strlcpy(wheelconfigmod, com_modname, sizeof(wheelconfigmod));
+	wheelconfigloaded = true;
+	CL_WeaponWheel_UseBuiltinWeapons();
+
+	file = FS_LoadFile(WEAPONWHEEL_CONFIG, tempmempool, true, &filesize);
+	if (!file)
+		return;
+
+	if (CL_WeaponWheel_ParseSection((const char *)file, filesize, com_modname))
+		Con_DPrintf("weapon wheel: %i weapons from " WEAPONWHEEL_CONFIG " section \"%s\"\n", wheelweaponcount, com_modname);
+	else if (CL_WeaponWheel_ParseSection((const char *)file, filesize, "default"))
+		Con_DPrintf("weapon wheel: %i weapons from " WEAPONWHEEL_CONFIG " section \"default\"\n", wheelweaponcount);
+	else
+	{
+		Con_Printf("weapon wheel: no usable section for \"%s\" in " WEAPONWHEEL_CONFIG ", using the built in list\n", com_modname);
+		CL_WeaponWheel_UseBuiltinWeapons();
+	}
+
+	Mem_Free(file);
+}
+
+static void CL_WeaponWheel_Reload_f(void)
+{
+	int i;
+
+	CL_WeaponWheel_LoadConfig();
+	Con_Printf("weapon wheel: %i weapons for \"%s\"\n", wheelweaponcount, wheelconfigmod);
+	for (i = 0;i < wheelweaponcount;i++)
+		Con_Printf("  %2i  item %-10i impulse %-4i %-20s %s\n", i + 1,
+			wheelweapons[i].itembit, wheelweapons[i].impulse, wheelweapons[i].name, wheelweapons[i].modelname);
 }
 
 // prefer the map's own precache, which is always fully loaded and owned by the map
@@ -122,29 +535,26 @@ qboolean CL_WeaponWheel_CanOpen(void)
 	return true;
 }
 
-static void CL_WeaponWheel_AddWeapons(const wheelweapon_t *weapons, int count)
-{
-	int i;
-	for (i = 0;i < count && wheelslotcount < MAX_WHEEL_SLOTS;i++)
-	{
-		wheelslot_t *slot = &wheelslots[wheelslotcount++];
-		slot->weapon = &weapons[i];
-		slot->owned = (cl.stats[STAT_ITEMS] & weapons[i].itembit) != 0;
-		slot->model = slot->owned ? CL_WeaponWheel_FindModel(weapons[i].modelname) : NULL;
-		slot->grow = 0.0f;
-		VectorClear(slot->origin);
-	}
-}
-
 void CL_WeaponWheel_Open(void)
 {
+	int i;
+
+	if (!wheelconfigloaded || strcmp(wheelconfigmod, com_modname))
+		CL_WeaponWheel_LoadConfig();
+
 	wheelslotcount = 0;
 	weaponwheel_selection = -1;
 	wheelspin = 0.0f;
 
-	CL_WeaponWheel_AddWeapons(wheelweapons_quake, WHEEL_NUM_QUAKE);
-	if (gamemode == GAME_HIPNOTIC || gamemode == GAME_QUOTH)
-		CL_WeaponWheel_AddWeapons(wheelweapons_hipnotic, WHEEL_NUM_HIPNOTIC);
+	for (i = 0;i < wheelweaponcount;i++)
+	{
+		wheelslot_t *slot = &wheelslots[wheelslotcount++];
+		slot->weapon = &wheelweapons[i];
+		slot->owned = (cl.stats[STAT_ITEMS] & wheelweapons[i].itembit) != 0;
+		slot->model = slot->owned ? CL_WeaponWheel_FindModel(wheelweapons[i].modelname) : NULL;
+		slot->grow = 0.0f;
+		VectorClear(slot->origin);
+	}
 
 	weaponwheel_active = 1;
 
@@ -257,6 +667,24 @@ void CL_WeaponWheel_Relink(void)
 	float worldscale, dist, radius, cursorlength, cursorangle, bestangle;
 	float modelsize, framelerp;
 	vec3_t forward, right, up, hub, angles;
+
+	// reports what a mod actually sets, so its weaponwheel.json section can be written by hand
+	if (vr_weaponwheel_scan.integer)
+	{
+		static int scanitems = -1;
+		static int scanweapon = -1;
+
+		if (cl.stats[STAT_ITEMS] != scanitems || cl.stats[STAT_ACTIVEWEAPON] != scanweapon)
+		{
+			int modelindex = cl.stats[STAT_WEAPON];
+
+			scanitems = cl.stats[STAT_ITEMS];
+			scanweapon = cl.stats[STAT_ACTIVEWEAPON];
+			Con_Printf("weaponwheel scan: mod \"%s\"  owned 0x%08x  active item %i (0x%08x)  model \"%s\"\n",
+				com_modname, (unsigned int)scanitems, scanweapon, (unsigned int)scanweapon,
+				(modelindex > 0 && modelindex < MAX_MODELS) ? cl.model_name[modelindex] : "");
+		}
+	}
 
 	if (!weaponwheel_active || !wheelslotcount)
 		return;

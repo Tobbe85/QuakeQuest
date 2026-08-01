@@ -149,6 +149,7 @@ import android.widget.Toast;
 		//This will copy the shareware version of quake if user doesn't have anything installed
 		copy_asset(dir + "/id1", "pak0.pak");
 		copy_asset(dir + "/id1", "config.cfg");
+		copy_asset(dir + "/id1", "weaponwheel.json");
 		copy_asset(dir, "commandline.txt");
 
 		try {

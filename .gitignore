@@ -27,6 +27,7 @@ projects/Android/build/*
 projects/Android/.idea/*
 Projects/Android/.cxx/*
 *.json
+!assets/weaponwheel.json
 Projects/Android/.externalNativeBuild/*
 *.bin
 Projects/Android/.gradle/*
