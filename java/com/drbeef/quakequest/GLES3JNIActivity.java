@@ -51,7 +51,7 @@ import android.widget.Toast;
 
 		try
 		{
-			System.loadLibrary("openxr_loader");
+			System.loadLibrary("openxr_loader_" + manufacturer);
 		} catch (Throwable e)
 		{}
 
@@ -76,6 +76,7 @@ import android.widget.Toast;
 	private static final int REQUEST_READ_EXTERNAL_STORAGE = 2294;
 	private static final int REQUEST_WRITE_EXTERNAL_STORAGE = 2295;
 	private static final int REQUEST_MANAGE_ALL_FILES = 2296;
+	private int permissionAttempt = 0;
 
 	@Override protected void onCreate( Bundle icicle )
 	{
@@ -94,31 +95,13 @@ import android.widget.Toast;
 
 	/** Initializes the Activity only if the permission has been granted. */
 	private void checkPermissionsAndInitialize() {
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-			//request for the permission
-			Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-			Uri uri = Uri.fromParts("package", getPackageName(), null);
-			intent.setData(uri);
-			startActivityForResult(intent, REQUEST_MANAGE_ALL_FILES);
-
-			finishAffinity(); // Cleanly exit
-
-		}
-		else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
-				ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-						!= PackageManager.PERMISSION_GRANTED) {
-			ActivityCompat.requestPermissions(
-					this,
-					new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE },
+		// Boilerplate for checking runtime permissions in Android.
+		if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+				!= PackageManager.PERMISSION_GRANTED){
+			ActivityCompat.requestPermissions(this,
+					new String[]{Manifest.permission.READ_EXTERNAL_STORAGE,
+							Manifest.permission.WRITE_EXTERNAL_STORAGE},
 					REQUEST_WRITE_EXTERNAL_STORAGE);
-		}
-		else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
-				ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-						!= PackageManager.PERMISSION_GRANTED) {
-			ActivityCompat.requestPermissions(
-					this,
-					new String[] { Manifest.permission.READ_EXTERNAL_STORAGE },
-					REQUEST_READ_EXTERNAL_STORAGE);
 		}
 		else
 		{
@@ -135,15 +118,17 @@ import android.widget.Toast;
 	}
 
 	@Override
-	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-		super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-		if ((requestCode == REQUEST_READ_EXTERNAL_STORAGE || requestCode == REQUEST_WRITE_EXTERNAL_STORAGE)
-				&& grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-			checkPermissionsAndInitialize();
-		} else {
-			System.exit(0);
+	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+		if (requestCode == REQUEST_WRITE_EXTERNAL_STORAGE) {
+			permissionAttempt++;
+			if (permissionAttempt < 5) {
+				checkPermissionsAndInitialize();
+			} else {
+				System.exit(0);
+			}
 		}
 	}
+
 
 	public void create() {
 		//This will copy the shareware version of quake if user doesn't have anything installed
