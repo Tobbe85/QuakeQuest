@@ -34,6 +34,7 @@ import android.view.KeyEvent;
 
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.widget.Toast;
 
 @SuppressLint("SdCardPath") public class GLES3JNIActivity extends Activity implements SurfaceHolder.Callback
 {
@@ -50,8 +51,12 @@ import android.support.v4.content.ContextCompat;
 
 		try
 		{
-			//Load manufacturer specific loader
-			System.loadLibrary("openxr_loader_" + manufacturer);
+			System.loadLibrary("openxr_loader");
+		} catch (Throwable e)
+		{}
+
+		try
+		{
 			setenv("OPENXR_HMD", manufacturer, true);
 		} catch (Exception e)
 		{}
@@ -63,14 +68,14 @@ import android.support.v4.content.ContextCompat;
 
 	String commandLineParams;
 
-	private SurfaceHolder mSurfaceHolder;
+    private SurfaceHolder mSurfaceHolder;
 	private long mNativeHandle;
 
-	private int permissionAttempt = 0;
-	private static final int READ_EXTERNAL_STORAGE_PERMISSION_ID = 1;
-	private static final int WRITE_EXTERNAL_STORAGE_PERMISSION_ID = 2;
-
 	String dir;
+
+	private static final int REQUEST_READ_EXTERNAL_STORAGE = 2294;
+	private static final int REQUEST_WRITE_EXTERNAL_STORAGE = 2295;
+	private static final int REQUEST_MANAGE_ALL_FILES = 2296;
 
 	@Override protected void onCreate( Bundle icicle )
 	{
@@ -78,34 +83,42 @@ import android.support.v4.content.ContextCompat;
 		Log.v( TAG, "GLES3JNIActivity::onCreate()" );
 		super.onCreate( icicle );
 
-		SurfaceView mView = new SurfaceView(this);
+        SurfaceView mView = new SurfaceView(this);
 		setContentView(mView);
 		mView.getHolder().addCallback( this );
 
 		dir = "/sdcard/QuakeQuest";
-		//dir = getBaseContext().getExternalFilesDir(null).getAbsolutePath();
-
-		// Force the screen to stay on, rather than letting it dim and shut off
-		// while the user is watching a movie.
-		getWindow().addFlags( WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON );
-
-		// Force screen brightness to stay at maximum
-		WindowManager.LayoutParams params = getWindow().getAttributes();
-		params.screenBrightness = 1.0f;
-		getWindow().setAttributes( params );
 
 		checkPermissionsAndInitialize();
 	}
 
 	/** Initializes the Activity only if the permission has been granted. */
 	private void checkPermissionsAndInitialize() {
-		// Boilerplate for checking runtime permissions in Android.
-		if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-				!= PackageManager.PERMISSION_GRANTED){
-			ActivityCompat.requestPermissions(this,
-					new String[]{Manifest.permission.READ_EXTERNAL_STORAGE,
-							Manifest.permission.WRITE_EXTERNAL_STORAGE},
-					WRITE_EXTERNAL_STORAGE_PERMISSION_ID);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+			//request for the permission
+			Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+			Uri uri = Uri.fromParts("package", getPackageName(), null);
+			intent.setData(uri);
+			startActivityForResult(intent, REQUEST_MANAGE_ALL_FILES);
+
+			finishAffinity(); // Cleanly exit
+
+		}
+		else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
+				ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+						!= PackageManager.PERMISSION_GRANTED) {
+			ActivityCompat.requestPermissions(
+					this,
+					new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE },
+					REQUEST_WRITE_EXTERNAL_STORAGE);
+		}
+		else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
+				ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+						!= PackageManager.PERMISSION_GRANTED) {
+			ActivityCompat.requestPermissions(
+					this,
+					new String[] { Manifest.permission.READ_EXTERNAL_STORAGE },
+					REQUEST_READ_EXTERNAL_STORAGE);
 		}
 		else
 		{
@@ -114,28 +127,29 @@ import android.support.v4.content.ContextCompat;
 		}
 	}
 
-	/** Handles the user accepting the permission. */
 	@Override
-	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
-		if (requestCode == WRITE_EXTERNAL_STORAGE_PERMISSION_ID) {
-			permissionAttempt++;
-			if (permissionAttempt < 5) {
-				checkPermissionsAndInitialize();
-			} else {
-				System.exit(0);
-			}
-		}
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		super.onActivityResult(requestCode, resultCode, data);
+		finishAffinity(); // Cleanly exit
+		System.exit(0);
 	}
 
 	@Override
-	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		create();
+	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+		super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+		if ((requestCode == REQUEST_READ_EXTERNAL_STORAGE || requestCode == REQUEST_WRITE_EXTERNAL_STORAGE)
+				&& grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+			checkPermissionsAndInitialize();
+		} else {
+			System.exit(0);
+		}
 	}
 
 	public void create() {
 		//This will copy the shareware version of quake if user doesn't have anything installed
 		copy_asset(dir + "/id1", "pak0.pak");
 		copy_asset(dir + "/id1", "config.cfg");
+		copy_asset(dir + "/id1", "weaponwheel.json");
 		copy_asset(dir, "commandline.txt");
 
 		try {
@@ -172,11 +186,11 @@ import android.support.v4.content.ContextCompat;
 
 		mNativeHandle = GLES3JNILib.onCreate( this, commandLineParams );
 	}
-
+	
 	public void copy_asset(String path, String name) {
 		File f = new File(path + "/" + name);
 		if (!f.exists()) {
-
+			
 			//Ensure we have an appropriate folder
 			new File(path).mkdirs();
 			_copy_asset(name, path + "/" + name);
@@ -222,8 +236,7 @@ import android.support.v4.content.ContextCompat;
 		Log.v( TAG, "GLES3JNIActivity::onStart()" );
 		super.onStart();
 
-		if ( mNativeHandle != 0 )
-		{
+		if (mNativeHandle != 0) {
 			GLES3JNILib.onStart(mNativeHandle, this);
 		}
 	}
@@ -233,8 +246,7 @@ import android.support.v4.content.ContextCompat;
 		Log.v( TAG, "GLES3JNIActivity::onResume()" );
 		super.onResume();
 
-		if ( mNativeHandle != 0 )
-		{
+		if (mNativeHandle != 0) {
 			GLES3JNILib.onResume(mNativeHandle);
 		}
 	}
@@ -242,8 +254,7 @@ import android.support.v4.content.ContextCompat;
 	@Override protected void onPause()
 	{
 		Log.v( TAG, "GLES3JNIActivity::onPause()" );
-		if ( mNativeHandle != 0 )
-		{
+		if (mNativeHandle != 0) {
 			GLES3JNILib.onPause(mNativeHandle);
 		}
 		super.onPause();
@@ -252,8 +263,7 @@ import android.support.v4.content.ContextCompat;
 	@Override protected void onStop()
 	{
 		Log.v( TAG, "GLES3JNIActivity::onStop()" );
-		if ( mNativeHandle != 0 )
-		{
+		if (mNativeHandle != 0) {
 			GLES3JNILib.onStop(mNativeHandle);
 		}
 		super.onStop();
@@ -263,12 +273,14 @@ import android.support.v4.content.ContextCompat;
 	{
 		Log.v( TAG, "GLES3JNIActivity::onDestroy()" );
 
-		if ( mSurfaceHolder != null )
+		if ( mSurfaceHolder != null && mNativeHandle != 0)
 		{
 			GLES3JNILib.onSurfaceDestroyed( mNativeHandle );
 		}
 
-		GLES3JNILib.onDestroy( mNativeHandle );
+		if (mNativeHandle != 0) {
+			GLES3JNILib.onDestroy(mNativeHandle);
+		}
 
 		super.onDestroy();
 		mNativeHandle = 0;
@@ -293,7 +305,7 @@ import android.support.v4.content.ContextCompat;
 			mSurfaceHolder = holder;
 		}
 	}
-
+	
 	@Override public void surfaceDestroyed( SurfaceHolder holder )
 	{
 		Log.v( TAG, "GLES3JNIActivity::surfaceDestroyed()" );
